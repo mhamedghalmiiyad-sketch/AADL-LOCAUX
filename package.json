@@ -1,0 +1,13 @@
+{
+  "name": "aadl-bot",
+  "version": "1.0.0",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "mongoose": "^8.0.0",
+    "node-telegram-bot-api": "^0.64.0",
+    "puppeteer": "^21.0.0"
+  }
+}
