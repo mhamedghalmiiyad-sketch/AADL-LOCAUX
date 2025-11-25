@@ -1,23 +1,37 @@
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
-const express = require('express'); // <--- NEW: Import Express
+const express = require('express');
+const https = require('https'); // Used for Self-Ping
 
 // --- CONFIGURATION ---
-const TELEGRAM_TOKEN = "8567471950:AAEOVaFupM-Z0iepul7Ktu9M_UKVLyNi_wY"; 
+const TELEGRAM_TOKEN = "8567471950:AAEOVaFupM-Z0iepul7Ktu9M_UKVLyNi_wY";
 const MONGO_URI = "mongodb+srv://AADLLOCAUX:GzYQskvvwxyMPVEi@cluster0.xr2zdvk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
-// --- FAKE SERVER FOR RENDER (KEEPS BOT ALIVE) ---
+// 🔴 YOUR RENDER URL (From your logs)
+// This is the URL the bot will visit to stay awake
+const RENDER_EXTERNAL_URL = "https://aadl-bot-tjym.onrender.com"; 
+
+// --- FAKE SERVER FOR RENDER ---
 const app = express();
 const port = process.env.PORT || 3000;
 
 app.get('/', (req, res) => {
-  res.send('🤖 Bot is running!');
+    res.send('🤖 Bot is running and awake!');
 });
 
 app.listen(port, () => {
-  console.log(`🌐 Fake server listening on port ${port}`);
+    console.log(`🌐 Fake server listening on port ${port}`);
 });
-// ------------------------------------------------
+
+// --- SELF-PING MECHANISM (Every 2 Minutes) ---
+// This prevents Render Free Tier from sleeping
+setInterval(() => {
+    https.get(RENDER_EXTERNAL_URL, (res) => {
+        console.log(`🔄 Keep-Alive Ping Sent. Status: ${res.statusCode}`);
+    }).on('error', (e) => {
+        console.error(`❌ Keep-Alive Error: ${e.message}`);
+    });
+}, 2 * 60 * 1000); // 2 minutes in milliseconds
 
 // --- DATABASE SETUP ---
 mongoose.connect(MONGO_URI)
