@@ -10,6 +10,13 @@ const MONGO_URI = "mongodb+srv://AADLLOCAUX:GzYQskvvwxyMPVEi@cluster0.xr2zdvk.mo
 // 🔴 RENDER URL (For Self-Ping)
 const RENDER_EXTERNAL_URL = "https://aadl-bot-tjym.onrender.com"; 
 
+// --- CONSTANTS FOR SERVICE BUTTON ---
+const MY_USERNAME = "gmiyad";
+const SERVICE_MSG = encodeURIComponent("تصميم وتطوير المواقع ( متاجر الكترونية ، مواقع شخصية ، مدونات ، ووردبريس )");
+const SERVICE_LINK = `https://t.me/${MY_USERNAME}?text=${SERVICE_MSG}`;
+// This button row will be added to every menu
+const SERVICE_BUTTON_ROW = [{ text: "🛍️ انشئ متجرك الإلكتروني", url: SERVICE_LINK }];
+
 // --- FAKE SERVER FOR RENDER ---
 const app = express();
 const port = process.env.PORT || 3000;
@@ -74,6 +81,9 @@ async function sendWilayaMenu(chatId) {
         keyboard.push(row);
     }
     
+    // Add Service Button at the bottom
+    keyboard.push(SERVICE_BUTTON_ROW);
+
     bot.sendMessage(chatId, "🇩🇿 <b>مرحباً! اختر الولاية:</b>\nSelect a Wilaya:", { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
 }
 
@@ -91,7 +101,10 @@ async function sendProgramMenu(chatId, wilaya) {
     ];
 
     const keyboard = programs.map(p => [{ text: p.text, callback_data: `PROG:${wilaya}:${p.id}` }]);
+    
+    // Add Navigation and Service Buttons
     keyboard.push([{ text: "🔙 الرجوع", callback_data: "MAIN_MENU" }]);
+    keyboard.push(SERVICE_BUTTON_ROW);
 
     bot.sendMessage(chatId, `📂 <b>ولاية: ${wilaya}</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
 }
@@ -103,7 +116,12 @@ async function sendLocalesList(chatId, selectedWilaya, type) {
 
     if (filteredItems.length === 0) {
         bot.sendMessage(chatId, `🚫 لا توجد محلات في ${selectedWilaya}.`, {
-            reply_markup: { inline_keyboard: [[{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }]] }
+            reply_markup: { 
+                inline_keyboard: [
+                    [{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }],
+                    SERVICE_BUTTON_ROW
+                ] 
+            }
         });
         return;
     }
@@ -116,49 +134,29 @@ async function sendLocalesList(chatId, selectedWilaya, type) {
 
     bot.sendMessage(chatId, message, {
         parse_mode: 'HTML', disable_web_page_preview: true,
-        reply_markup: { inline_keyboard: [[{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }]] }
-    });
-}
-
-// --- HELPER: Send Service Button ---
-function sendServiceButton(chatId) {
-    const myUsername = "gmiyad"; 
-    
-    // Encoded message: "تصميم وتطوير المواقع ( متاجر الكترونية ، مواقع شخصية ، مدونات ، ووردبريس )"
-    const messageText = encodeURIComponent("تصميم وتطوير المواقع ( متاجر الكترونية ، مواقع شخصية ، مدونات ، ووردبريس )");
-    const directLink = `https://t.me/${myUsername}?text=${messageText}`;
-
-    // Updated text to match the user request
-    const text = `🚀 <b>خدمات إضافية:</b>\nانشئ متجرك الإلكتروني الآن - تصميم وتطوير المواقع (متاجر الكترونية، مواقع شخصية، مدونات، ووردبريس)`;
-
-    bot.sendMessage(chatId, text, {
-        parse_mode: 'HTML',
-        reply_markup: {
+        reply_markup: { 
             inline_keyboard: [
-                [
-                    {
-                        text: "🛍️ انشئ متجرك الإلكتروني",
-                        url: directLink
-                    }
-                ]
-            ]
+                [{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }],
+                SERVICE_BUTTON_ROW
+            ] 
         }
     });
 }
 
 // --- HANDLERS ---
 
-// 1. Handle /start (Shows Wilaya Menu + Service Button)
+// 1. Handle /start (Shows Wilaya Menu)
 bot.onText(/\/start/, async (msg) => {
     const chatId = msg.chat.id;
     await sendWilayaMenu(chatId);
-    // Send the service offer directly after the menu
-    sendServiceButton(chatId);
 });
 
-// 2. Handle /services or /commands
+// 2. Handle /services or /commands (Sends just the button)
 bot.onText(/\/services|\/commands/, (msg) => {
-    sendServiceButton(msg.chat.id);
+    bot.sendMessage(msg.chat.id, "🚀 <b>خدماتنا:</b>", {
+        parse_mode: 'HTML',
+        reply_markup: { inline_keyboard: [SERVICE_BUTTON_ROW] }
+    });
 });
 
 // 3. Handle Callback Queries (Buttons)
