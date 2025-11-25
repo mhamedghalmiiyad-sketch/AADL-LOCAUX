@@ -1,112 +1,74 @@
 const TelegramBot = require('node-telegram-bot-api');
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('mongoose');
+const express = require('express'); // <--- NEW: Import Express
 
 // --- CONFIGURATION ---
 const TELEGRAM_TOKEN = "8567471950:AAEOVaFupM-Z0iepul7Ktu9M_UKVLyNi_wY"; 
-const BASE_DIR = path.join(__dirname, 'aadl_local_data');
-const HISTORY_FILE = path.join(BASE_DIR, 'history.json');
+const MONGO_URI = "mongodb+srv://AADLLOCAUX:GzYQskvvwxyMPVEi@cluster0.xr2zdvk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
-// --- LABELS ---
-const SHORT_LABELS = {
-    "Medical": "🩺 Medical (صحة)",
-    "LGG_Simple": "🏠 Simple (تراضي)",
-    "LGG_Terme": "📅 Terme (بالتقسيط)",
-    "Adjudication": "📢 Enchères (مزاد)"
-};
+// --- FAKE SERVER FOR RENDER (KEEPS BOT ALIVE) ---
+const app = express();
+const port = process.env.PORT || 3000;
 
-// --- SETUP ---
+app.get('/', (req, res) => {
+  res.send('🤖 Bot is running!');
+});
+
+app.listen(port, () => {
+  console.log(`🌐 Fake server listening on port ${port}`);
+});
+// ------------------------------------------------
+
+// --- DATABASE SETUP ---
+mongoose.connect(MONGO_URI)
+    .then(() => console.log("✅ Bot Connected to Database"))
+    .catch(err => console.log(err));
+
+const PropertySchema = new mongoose.Schema({
+    id: String,
+    wilaya: String,
+    site: String,
+    price: String,
+    surface: String,
+    type: String,
+    link: String,
+    map_link: String,
+    status: String,
+});
+const Property = mongoose.model('Property', PropertySchema);
+
+// --- BOT SETUP ---
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
-console.log("🤖 Interactive Bot is ONLINE. Waiting for users...");
-
-// --- HELPERS ---
-
-function loadHistory() {
-    if (fs.existsSync(HISTORY_FILE)) {
-        return JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-    }
-    return {};
-}
-
-// 🛠️ HELPER: Standardize Wilaya Names (Removes "16- ", "01- ", etc.)
 function normalizeWilaya(rawName) {
     if (!rawName) return "Unknown";
-    // Regex: Remove starting digits followed by hyphen or space
     return rawName.replace(/^\d+\s*-\s*/, '').trim();
 }
 
-// --- INTERACTION LOGIC ---
-
-// 1. Handle /start
-bot.onText(/\/start/, (msg) => {
-    sendWilayaMenu(msg.chat.id);
-});
-
-// 2. Handle Button Clicks
-bot.on('callback_query', async (query) => {
-    const chatId = query.message.chat.id;
-    const data = query.data;
-
-    try {
-        if (data === 'MAIN_MENU') {
-            await sendWilayaMenu(chatId);
-        } 
-        else if (data.startsWith('WIL:')) {
-            const selectedWilaya = data.split('WIL:')[1];
-            await sendProgramMenu(chatId, selectedWilaya);
-        } 
-        else if (data.startsWith('PROG:')) {
-            // Data Format: PROG:WilayaName:ProgramType
-            const parts = data.split(':');
-            const selectedWilaya = parts[1];
-            const selectedType = parts[2];
-            await sendLocalesList(chatId, selectedWilaya, selectedType);
-        }
-        
-        await bot.answerCallbackQuery(query.id);
-    } catch (error) {
-        console.error("Callback Error:", error.message);
-    }
-});
-
-// --- MENU FUNCTIONS ---
-
+// --- MENU 1: WILAYAS ---
 async function sendWilayaMenu(chatId) {
-    const history = loadHistory();
-    
-    // 1. Get all raw wilaya names from active items
-    const rawWilayas = Object.values(history)
-        .filter(item => item.status === 'active')
-        .map(item => item.wilaya);
+    const items = await Property.find({ status: 'active' }).select('wilaya');
+    const uniqueWilayas = [...new Set(items.map(i => normalizeWilaya(i.wilaya)))].sort();
 
-    // 2. Clean them (normalize) and put in a Set to remove duplicates
-    const uniqueWilayas = new Set();
-    rawWilayas.forEach(w => uniqueWilayas.add(normalizeWilaya(w)));
-
-    // 3. Convert to array and sort alphabetically
-    const sortedWilayas = [...uniqueWilayas].sort();
-
-    if (sortedWilayas.length === 0) {
-        bot.sendMessage(chatId, "⚠️ لا توجد بيانات متوفرة حاليا.\nDatabase is empty or no active items.");
+    if (uniqueWilayas.length === 0) {
+        bot.sendMessage(chatId, "⚠️ لا توجد بيانات متوفرة حاليا.\nDatabase is empty.");
         return;
     }
 
-    // 4. Build Keyboard
     const keyboard = [];
-    for (let i = 0; i < sortedWilayas.length; i += 2) {
-        const row = [{ text: sortedWilayas[i], callback_data: `WIL:${sortedWilayas[i]}` }];
-        if (sortedWilayas[i+1]) {
-            row.push({ text: sortedWilayas[i+1], callback_data: `WIL:${sortedWilayas[i+1]}` });
-        }
+    for (let i = 0; i < uniqueWilayas.length; i += 2) {
+        const row = [{ text: uniqueWilayas[i], callback_data: `WIL:${uniqueWilayas[i]}` }];
+        if (uniqueWilayas[i+1]) row.push({ text: uniqueWilayas[i+1], callback_data: `WIL:${uniqueWilayas[i+1]}` });
         keyboard.push(row);
     }
     
-    bot.sendMessage(chatId, "🇩🇿 <b>مرحباً! اختر الولاية:</b>\nSelect a Wilaya:", {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: keyboard }
-    });
+    bot.sendMessage(chatId, "🇩🇿 <b>مرحباً! اختر الولاية:</b>\nSelect a Wilaya:", { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
 }
+
+// --- MENU 2: PROGRAMS ---
+const SHORT_LABELS = {
+    "Medical": "🩺 Medical", "LGG_Simple": "🏠 Simple", "LGG_Terme": "📅 Terme", "Adjudication": "📢 Enchères"
+};
 
 async function sendProgramMenu(chatId, wilaya) {
     const programs = [
@@ -117,48 +79,50 @@ async function sendProgramMenu(chatId, wilaya) {
     ];
 
     const keyboard = programs.map(p => [{ text: p.text, callback_data: `PROG:${wilaya}:${p.id}` }]);
-    keyboard.push([{ text: "🔙 الرجوع (Back)", callback_data: "MAIN_MENU" }]);
+    keyboard.push([{ text: "🔙 الرجوع", callback_data: "MAIN_MENU" }]);
 
-    bot.sendMessage(chatId, `📂 <b>ولاية: ${wilaya}</b>\nاختر البرنامج:\nSelect Program:`, {
-        parse_mode: 'HTML',
-        reply_markup: { inline_keyboard: keyboard }
-    });
+    bot.sendMessage(chatId, `📂 <b>ولاية: ${wilaya}</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
 }
 
+// --- MENU 3: LISTINGS ---
 async function sendLocalesList(chatId, selectedWilaya, type) {
-    const history = loadHistory();
-    
-    // FILTER LOGIC: Match the NORMALIZED name
-    const items = Object.values(history).filter(item => {
-        const itemWilayaClean = normalizeWilaya(item.wilaya); // Clean the database value
-        return item.status === 'active' && 
-               itemWilayaClean === selectedWilaya && // Compare with user selection
-               item.type === type;
-    });
+    const allItems = await Property.find({ status: 'active', type: type });
+    const filteredItems = allItems.filter(item => normalizeWilaya(item.wilaya) === selectedWilaya);
 
-    if (items.length === 0) {
-        bot.sendMessage(chatId, `🚫 لا توجد محلات لهذا النوع في ${selectedWilaya}.`, {
+    if (filteredItems.length === 0) {
+        bot.sendMessage(chatId, `🚫 لا توجد محلات في ${selectedWilaya}.`, {
             reply_markup: { inline_keyboard: [[{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }]] }
         });
         return;
     }
 
-    let message = `📋 <b>النتائج في ${selectedWilaya} (${items.length}):</b>\n\n`;
-    
-    items.slice(0, 10).forEach((item, index) => {
-        message += `${index + 1}. <b>${item.site}</b>\n`;
-        message += `   💰 ${item.price} DA | 📏 ${item.surface}m²\n`;
-        message += `   🔗 <a href="${item.link}">رابط التسجيل</a>\n`;
-        message += `   🗺️ <a href="${item.map_link || '#'}">Google Maps</a>\n\n`;
+    let message = `📋 <b>النتائج (${filteredItems.length}):</b>\n\n`;
+    filteredItems.slice(0, 10).forEach((item, index) => {
+        message += `${index + 1}. <b>${item.site}</b>\n💰 ${item.price} DA\n🔗 <a href="${item.link}">رابط التسجيل</a>\n\n`;
     });
-
-    if (items.length > 10) message += `<i>... و ${items.length - 10} آخرين.</i>`;
+    if (filteredItems.length > 10) message += `<i>... و ${filteredItems.length - 10} آخرين.</i>`;
 
     bot.sendMessage(chatId, message, {
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
-        reply_markup: { 
-            inline_keyboard: [[{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }]] 
-        }
+        parse_mode: 'HTML', disable_web_page_preview: true,
+        reply_markup: { inline_keyboard: [[{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }]] }
     });
 }
+
+// --- HANDLERS ---
+bot.onText(/\/start/, (msg) => sendWilayaMenu(msg.chat.id));
+
+bot.on('callback_query', async (query) => {
+    const chatId = query.message.chat.id;
+    const data = query.data;
+    try {
+        if (data === 'MAIN_MENU') await sendWilayaMenu(chatId);
+        else if (data.startsWith('WIL:')) await sendProgramMenu(chatId, data.split('WIL:')[1]);
+        else if (data.startsWith('PROG:')) {
+            const parts = data.split(':');
+            await sendLocalesList(chatId, parts[1], parts[2]);
+        }
+        await bot.answerCallbackQuery(query.id);
+    } catch (error) { console.error(error); }
+});
+
+console.log("🤖 Interactive Bot is ONLINE on Render.");
