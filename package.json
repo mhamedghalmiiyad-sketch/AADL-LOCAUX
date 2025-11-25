@@ -6,8 +6,8 @@
     "start": "node bot.js"
   },
   "dependencies": {
-    "mongoose": "^8.0.0",
+    "mongoose": "^8.20.1",
     "node-telegram-bot-api": "^0.64.0",
-    "puppeteer": "^21.0.0"
+    "puppeteer": "^21.11.0"
   }
 }
