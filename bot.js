@@ -1,14 +1,13 @@
 const TelegramBot = require('node-telegram-bot-api');
 const mongoose = require('mongoose');
 const express = require('express');
-const https = require('https'); // Used for Self-Ping
+const https = require('https'); 
 
 // --- CONFIGURATION ---
 const TELEGRAM_TOKEN = "8567471950:AAEOVaFupM-Z0iepul7Ktu9M_UKVLyNi_wY";
 const MONGO_URI = "mongodb+srv://AADLLOCAUX:GzYQskvvwxyMPVEi@cluster0.xr2zdvk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
-// 🔴 YOUR RENDER URL (From your logs)
-// This is the URL the bot will visit to stay awake
+// 🔴 RENDER URL (For Self-Ping)
 const RENDER_EXTERNAL_URL = "https://aadl-bot-tjym.onrender.com"; 
 
 // --- FAKE SERVER FOR RENDER ---
@@ -24,14 +23,13 @@ app.listen(port, () => {
 });
 
 // --- SELF-PING MECHANISM (Every 2 Minutes) ---
-// This prevents Render Free Tier from sleeping
 setInterval(() => {
     https.get(RENDER_EXTERNAL_URL, (res) => {
         console.log(`🔄 Keep-Alive Ping Sent. Status: ${res.statusCode}`);
     }).on('error', (e) => {
         console.error(`❌ Keep-Alive Error: ${e.message}`);
     });
-}, 2 * 60 * 1000); // 2 minutes in milliseconds
+}, 2 * 60 * 1000); 
 
 // --- DATABASE SETUP ---
 mongoose.connect(MONGO_URI)
@@ -122,9 +120,48 @@ async function sendLocalesList(chatId, selectedWilaya, type) {
     });
 }
 
-// --- HANDLERS ---
-bot.onText(/\/start/, (msg) => sendWilayaMenu(msg.chat.id));
+// --- HELPER: Send Service Button ---
+function sendServiceButton(chatId) {
+    const myUsername = "gmiyad"; 
+    
+    // Encoded message: "تصميم وتطوير المواقع ( متاجر الكترونية ، مواقع شخصية ، مدونات ، ووردبريس )"
+    const messageText = encodeURIComponent("تصميم وتطوير المواقع ( متاجر الكترونية ، مواقع شخصية ، مدونات ، ووردبريس )");
+    const directLink = `https://t.me/${myUsername}?text=${messageText}`;
 
+    // Updated text to match the user request
+    const text = `🚀 <b>خدمات إضافية:</b>\nانشئ متجرك الإلكتروني الآن - تصميم وتطوير المواقع (متاجر الكترونية، مواقع شخصية، مدونات، ووردبريس)`;
+
+    bot.sendMessage(chatId, text, {
+        parse_mode: 'HTML',
+        reply_markup: {
+            inline_keyboard: [
+                [
+                    {
+                        text: "🛍️ انشئ متجرك الإلكتروني",
+                        url: directLink
+                    }
+                ]
+            ]
+        }
+    });
+}
+
+// --- HANDLERS ---
+
+// 1. Handle /start (Shows Wilaya Menu + Service Button)
+bot.onText(/\/start/, async (msg) => {
+    const chatId = msg.chat.id;
+    await sendWilayaMenu(chatId);
+    // Send the service offer directly after the menu
+    sendServiceButton(chatId);
+});
+
+// 2. Handle /services or /commands
+bot.onText(/\/services|\/commands/, (msg) => {
+    sendServiceButton(msg.chat.id);
+});
+
+// 3. Handle Callback Queries (Buttons)
 bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
