@@ -119,7 +119,7 @@ async function sendSubscriptionMenu(chatId) {
 
     keyboard.push([{ text: "🔙 الرجوع للقائمة الرئيسية", callback_data: "MAIN_MENU" }]);
 
-    bot.sendMessage(chatId, "🔔 <b>إدارة التنبيهات:</b>\nاضغط على الولاية لتفعيل أو إيقاف الإشعار عند توفر سكنات جديدة.\n\nClick to subscribe/unsubscribe:", { 
+    bot.sendMessage(chatId, "🔔 <b>إدارة التنبيهات:</b>\nاضغط على الولاية لتفعيل أو إيقاف الإشعار عند توفر محلات جديدة.\n\nClick to subscribe/unsubscribe:", { 
         parse_mode: 'HTML', 
         reply_markup: { inline_keyboard: keyboard } 
     });
