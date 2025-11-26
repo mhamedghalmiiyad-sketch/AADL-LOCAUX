@@ -7,7 +7,7 @@ const https = require('https');
 const TELEGRAM_TOKEN = "8567471950:AAEOVaFupM-Z0iepul7Ktu9M_UKVLyNi_wY";
 const MONGO_URI = "mongodb+srv://AADLLOCAUX:GzYQskvvwxyMPVEi@cluster0.xr2zdvk.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0";
 
-// 🔴 RENDER URL (For Self-Ping)
+// 🔴 RENDER URL (For Self-Ping - prevents sleeping)
 const RENDER_EXTERNAL_URL = "https://aadl-bot-tjym.onrender.com"; 
 
 // --- CONSTANTS FOR SERVICE BUTTON ---
@@ -52,6 +52,7 @@ const PropertySchema = new mongoose.Schema({
     type: String,
     link: String,
     map_link: String,
+    telegram_message_id: Number, // Used for the channel deep link
     status: String,
 });
 const Property = mongoose.model('Property', PropertySchema);
@@ -109,7 +110,7 @@ async function sendProgramMenu(chatId, wilaya) {
     bot.sendMessage(chatId, `📂 <b>ولاية: ${wilaya}</b>`, { parse_mode: 'HTML', reply_markup: { inline_keyboard: keyboard } });
 }
 
-// --- MENU 3: LISTINGS ---
+// --- MENU 3: LISTINGS (UPDATED FOR FULL LOADING & LINKS) ---
 async function sendLocalesList(chatId, selectedWilaya, type) {
     const allItems = await Property.find({ status: 'active', type: type });
     const filteredItems = allItems.filter(item => normalizeWilaya(item.wilaya) === selectedWilaya);
@@ -126,21 +127,63 @@ async function sendLocalesList(chatId, selectedWilaya, type) {
         return;
     }
 
-    let message = `📋 <b>النتائج (${filteredItems.length}):</b>\n\n`;
-    filteredItems.slice(0, 10).forEach((item, index) => {
-        message += `${index + 1}. <b>${item.site}</b>\n💰 ${item.price} DA\n🔗 <a href="${item.link}">رابط التسجيل</a>\n\n`;
-    });
-    if (filteredItems.length > 10) message += `<i>... و ${filteredItems.length - 10} آخرين.</i>`;
+    // --- BATCH SENDING LOGIC ---
+    const BATCH_SIZE = 15; // Send 15 items per message to avoid limits
+    
+    bot.sendMessage(chatId, `🚀 <b>جاري تحميل ${filteredItems.length} نتيجة...</b>`, { parse_mode: 'HTML' });
 
-    bot.sendMessage(chatId, message, {
-        parse_mode: 'HTML', disable_web_page_preview: true,
-        reply_markup: { 
-            inline_keyboard: [
-                [{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }],
-                SERVICE_BUTTON_ROW
-            ] 
+    for (let i = 0; i < filteredItems.length; i += BATCH_SIZE) {
+        const batch = filteredItems.slice(i, i + BATCH_SIZE);
+        let message = "";
+        
+        // Add header only to the first message
+        if (i === 0) {
+            message += `📋 <b>قائمة النتائج (${selectedWilaya}):</b>\n\n`;
         }
-    });
+
+        batch.forEach((item, index) => {
+            // Construct Channel Link: https://t.me/AADLLOCAUX/MESSAGE_ID
+            const channelLink = item.telegram_message_id 
+                ? `https://t.me/AADLLOCAUX/${item.telegram_message_id}` 
+                : `https://t.me/AADLLOCAUX`;
+
+            message += `${i + index + 1}. <b>${item.site}</b>\n`;
+            message += `💰 ${item.price} DA\n`;
+            
+            // --- LINKS ---
+            // 1. Google Maps (Inspection)
+            if (item.map_link) {
+                message += `📍 <a href="${item.map_link}">موقع جوجل (Inspection)</a>\n`;
+            }
+            // 2. Registration Link
+            if (item.link) {
+                message += `🔗 <a href="${item.link}">رابط التسجيل (Registration)</a>\n`;
+            }
+            // 3. Channel Deep Link (To Main Channel)
+            message += `📢 <a href="${channelLink}">عرض الإعلان في القناة (View Post)</a>\n\n`;
+            
+            message += `----------------------------\n\n`;
+        });
+
+        // Add "Back" button only to the very last message
+        const isLastBatch = (i + BATCH_SIZE) >= filteredItems.length;
+        
+        const options = {
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        };
+
+        if (isLastBatch) {
+            options.reply_markup = { 
+                inline_keyboard: [
+                    [{ text: "🔙 الرجوع", callback_data: `WIL:${selectedWilaya}` }],
+                    SERVICE_BUTTON_ROW
+                ] 
+            };
+        }
+
+        await bot.sendMessage(chatId, message, options);
+    }
 }
 
 // --- HANDLERS ---
